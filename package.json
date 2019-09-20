@@ -23,7 +23,9 @@
   ],
   "main": "./index.js",
   "types": "./index.d.ts",
-  "dependencies": {},
+  "dependencies": {
+    "strip-ansi": "^5.2.0"
+  },
   "peerDependencies": {
     "@atomist/automation-client": "*",
     "@atomist/sdm": "*",
