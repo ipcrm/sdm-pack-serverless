@@ -2,15 +2,15 @@ import {
     Configuration,
 } from "@atomist/automation-client";
 import {
-    onAnyPush,
     SoftwareDeliveryMachine,
-    SoftwareDeliveryMachineConfiguration,
+    SoftwareDeliveryMachineConfiguration, whenPushSatisfies,
 } from "@atomist/sdm";
 import {
     configureSdm,
     createSoftwareDeliveryMachine,
 } from "@atomist/sdm-core";
 import {ServerlessDeploy} from "../lib/goal/deploy";
+import {IsServerlessDeployable} from "../lib/support/pushTest";
 
 export function machineMaker(config: SoftwareDeliveryMachineConfiguration): SoftwareDeliveryMachine {
 
@@ -21,14 +21,13 @@ export function machineMaker(config: SoftwareDeliveryMachineConfiguration): Soft
         },
     );
 
-    const dev = new ServerlessDeploy({
-        uniqueName: "serverless-deploy-dev",
-    }).with({
-        deployArgs: { stage: "dev" },
-    });
+    const dev = new ServerlessDeploy()
+        .with({
+            deployArgs: { stage: "dev" },
+        });
 
     sdm.withPushRules(
-        onAnyPush()
+        whenPushSatisfies(IsServerlessDeployable)
             .setGoals(dev),
     );
 

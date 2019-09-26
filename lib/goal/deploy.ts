@@ -6,8 +6,8 @@ import {
     FulfillableGoalDetails,
     FulfillableGoalWithRegistrations,
     getGoalDefinitionFrom,
-    Goal, GoalDetails,
-    Implementation,
+    Goal, GoalDefinition, GoalDetails,
+    Implementation, IndependentOfEnvironment,
     spawnLog,
     StringCapturingProgressLog,
     SuccessIsReturn0ErrorFinder,
@@ -16,6 +16,20 @@ import {
 import stripAnsi from "strip-ansi";
 
 export type ServerlessConfigLocator = (p: GitProject) => Promise<string>;
+
+const ServerlessGoalDefinition: GoalDefinition = {
+    displayName: "deploying via Serverless.com",
+    uniqueName: "serverless-deploy",
+    environment: IndependentOfEnvironment,
+    workingDescription: "Deploying via Serverless.com",
+    completedDescription: "Deployed via Serverless.com",
+    failedDescription: "Deployment via Serverless.com failed",
+    waitingForApprovalDescription: "Waiting for deployment approval",
+    waitingForPreApprovalDescription: "Waiting to start Serverless.com deployment",
+    stoppedDescription: "Deployment via Serverless.com stopped",
+    canceledDescription: "Deployment via Serverless.com cancelled",
+    retryFeasible: true,
+};
 
 interface ServerlessDeployDetails {
     /**
@@ -58,6 +72,7 @@ export class ServerlessDeploy extends FulfillableGoalWithRegistrations<Serverles
                 ...dependsOn: Goal[]) {
 
         super({
+            ...ServerlessGoalDefinition,
             ...getGoalDefinitionFrom(details, DefaultGoalNameGenerator.generateName("serverless-deploy")),
         }, ...dependsOn);
     }

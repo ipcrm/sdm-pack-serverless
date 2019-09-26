@@ -13,17 +13,24 @@ This SDM Extension pack adds functionality to integrate with [Serverless.com](ht
 To define a new Serverless deploy goal:
 
 ```typescript
-    const dev = new ServerlessDeploy({
-        uniqueName: "serverless-deploy-dev",
-    }).with({
-        deployArgs: { stage: "dev" },
-    });
+    const dev = new ServerlessDeploy()
+        .with({
+            deployArgs: { stage: "dev" },
+        });
 ```
 
 Within the ServerlessDeploy constructor you may supply any of the values in [PredicateGoalDefinition](https://atomist.github.io/sdm/interfaces/_lib_api_goal_goalwithfulfillment_.predicatedgoaldefinition.html) or [Goal](https://atomist.github.io/sdm/classes/_lib_api_goal_goal_.goal.html) to customize the display values or behavior of the goal.
 The registration (passed to the `with` method) uses the `ServerlessDeployDetails` interface (see typings for details) allows you to customize the details of how the serverless command is called.
 
 > Important: The Serverless.com command must be installed in the environment the SDM is running on
+
+This goal can be scheduled (if desired) using the push test in the pack:
+```typescript
+    sdm.withPushRules(
+        whenPushSatisfies(IsServerlessDeployable)
+            .setGoals(dev),
+    );
+```
 
 This pack expects to find a `serverless.yaml` (or yml) file in the project, by default (you can customize the file location, name, etc in `ServerlessDeployDetails`).  If found, the goal will continue to execute the deployment process.
 
