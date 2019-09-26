@@ -39,7 +39,8 @@ interface ServerlessDeployDetails {
 
     /**
      * Serverless Personal Access key.  Optional.  If not supplied you must set this value
-     * via the environment
+     * via the environment (SERVERLESS_ACCESS_KEY), or you must have already created a local
+     * config file for serverless (via Serverless config command)
      */
     accessKey?: string;
 
