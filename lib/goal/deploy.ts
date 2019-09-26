@@ -1,4 +1,4 @@
-import {GitProject} from "@atomist/automation-client";
+import {GitProject, logger} from "@atomist/automation-client";
 import {
     DefaultGoalNameGenerator,
     doWithProject,
@@ -105,10 +105,7 @@ export function serverlessDeploy(registration: ServerlessDeployDetails): Execute
 
         // Test if we have the creds we need to run a deployment
         if (!process.env.SERVERLESS_ACCESS_KEY && !registration.accessKey) {
-            return {
-                code: 1,
-                message: `Missing Serverless Access key, cannot deploy`,
-            };
+            gi.progressLog.write(`Warning: No Serverless credentials supplied, relying on pre-existing host configuration...`);
         }
 
         // Determine args
