@@ -2,21 +2,30 @@
   <img src="https://images.atomist.com/sdm/SDM-Logo-Dark.png">
 </p>
 
-# @atomist-seeds/sdm-pack
+# @ipcrm/sdm-pack-serverless
 
-[![atomist sdm goals](http://badge.atomist.com/T29E48P34/atomist-seeds/sdm-pack/24939d09-fe00-4a7a-8d52-0fc4c9672100)](https://app.atomist.com/workspace/T29E48P34)
-[![npm version](https://img.shields.io/npm/v/@atomist-seeds/sdm-pack.svg)](https://www.npmjs.com/package/@atomist-seeds/sdm-pack)
+This SDM Extension pack adds functionality to integrate with [Serverless.com](https://serverless.com).
 
-A starting point for an extension pack for an [Atomist][atomist]
-software delivery machine (SDM).
+## Usage
 
-Software delivery machines enable you to control your delivery process
-in code.  Think of it as an API for your software delivery.  See the
-[Atomist documentation][atomist-doc] for more information on the
-concept of a software delivery machine and how to create and develop
-an SDM.
+> Note: This pack does not require being registered via `sdm.AddExtensionPacks`.
 
-[atomist-doc]: https://docs.atomist.com/ (Atomist Documentation)
+To define a new Serverless deploy goal:
+
+```typescript
+    const dev = new ServerlessDeploy({
+        uniqueName: "serverless-deploy-dev",
+    }).with({
+        deployArgs: { stage: "dev" },
+    });
+```
+
+Within the ServerlessDeploy constructor you may supply any of the values in [PredicateGoalDefinition](https://atomist.github.io/sdm/interfaces/_lib_api_goal_goalwithfulfillment_.predicatedgoaldefinition.html) or [Goal](https://atomist.github.io/sdm/classes/_lib_api_goal_goal_.goal.html) to customize the display values or behavior of the goal.
+The registration (passed to the `with` method) uses the `ServerlessDeployDetails` interface (see typings for details) allows you to customize the details of how the serverless command is called.
+
+> Important: The Serverless.com command must be installed in the environment the SDM is running on
+
+This pack expects to find a `serverless.yaml` (or yml) file in the project, by default (you can customize the file location, name, etc in `ServerlessDeployDetails`).  If found, the goal will continue to execute the deployment process.
 
 ## Getting started
 

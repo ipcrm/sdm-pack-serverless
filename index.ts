@@ -14,4 +14,5 @@
  * limitations under the License.
  */
 
-export { SeedSupport } from "./lib/seed";
+export { ServerlessConfigLocator, ServerlessDeploy } from "./lib/goal/deploy";
+export { IsServerlessDeployable } from "./lib/support/pushTest";

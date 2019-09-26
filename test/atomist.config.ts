@@ -2,7 +2,6 @@ import {
     Configuration,
 } from "@atomist/automation-client";
 import {
-    goals,
     onAnyPush,
     SoftwareDeliveryMachine,
     SoftwareDeliveryMachineConfiguration,
@@ -24,41 +23,13 @@ export function machineMaker(config: SoftwareDeliveryMachineConfiguration): Soft
 
     const dev = new ServerlessDeploy({
         uniqueName: "serverless-deploy-dev",
-    })
-        .with({
-            deployArgs: {
-                stage: "dev",
-            },
-        });
-
-    const qa = new ServerlessDeploy({
-        uniqueName: "serverless-deploy-qa",
-        preApproval: true,
-    })
-        .with({
-            deployArgs: {
-                stage: "qa",
-            },
-        });
-
-    const prod = new ServerlessDeploy({
-        uniqueName: "serverless-deploy-prod",
-        preApproval: true,
-    })
-        .with({
-            deployArgs: {
-                stage: "prod",
-            },
-        });
-
-    const serverlessDeploy = goals("deploy-serverless")
-        .plan(dev)
-        .plan(qa).after(dev)
-        .plan(prod).after(qa);
+    }).with({
+        deployArgs: { stage: "dev" },
+    });
 
     sdm.withPushRules(
         onAnyPush()
-            .setGoals(serverlessDeploy),
+            .setGoals(dev),
     );
 
     return sdm;

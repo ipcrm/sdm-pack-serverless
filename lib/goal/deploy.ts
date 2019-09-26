@@ -1,3 +1,4 @@
+import {GitProject} from "@atomist/automation-client";
 import {
     DefaultGoalNameGenerator,
     doWithProject,
@@ -13,6 +14,8 @@ import {
     WriteToAllProgressLog,
 } from "@atomist/sdm";
 import stripAnsi from "strip-ansi";
+
+export type ServerlessConfigLocator = (p: GitProject) => Promise<string>;
 
 interface ServerlessDeployDetails {
     /**
@@ -40,11 +43,18 @@ interface ServerlessDeployDetails {
      * Test Args
      */
     testArgs?: Record<string, string>;
+
+    /**
+     * Serverless Config file path.  Optional.
+     *
+     * Supply a fixed path or a function to locate where the Serverless config file is located.
+     */
+    serverlessConfig?: string | ServerlessConfigLocator;
 }
 
 export class ServerlessDeploy extends FulfillableGoalWithRegistrations<ServerlessDeployDetails> {
     // tslint:disable-next-line
-    constructor(protected details: FulfillableGoalDetails | string = DefaultGoalNameGenerator.generateName("ecs-deploy-push"),
+    constructor(protected details: FulfillableGoalDetails | string = DefaultGoalNameGenerator.generateName("serverless-deploy"),
                 ...dependsOn: Goal[]) {
 
         super({
@@ -77,7 +87,7 @@ export function serverlessDeploy(registration: ServerlessDeployDetails): Execute
         gi.progressLog.write(`Starting Serverless deploy`);
         const pl = new WriteToAllProgressLog("combinedLog", gi.progressLog, new StringCapturingProgressLog());
 
-        // Deploy
+        // Test if we have the creds we need to run a deployment
         if (!process.env.SERVERLESS_ACCESS_KEY && !registration.accessKey) {
             return {
                 code: 1,
@@ -85,14 +95,19 @@ export function serverlessDeploy(registration: ServerlessDeployDetails): Execute
             };
         }
 
+        // Determine args
         let newArgs: string[] = [];
         if (registration.deployArgs) {
             newArgs = Object.keys(registration.deployArgs).map(a => `--${a}=${registration.deployArgs[a]}`);
         }
 
+        // Locate Config file
+        const config = registration.serverlessConfig ? [ "--config", await findServerlessConfig(gi.project, registration)] : [];
+
+        // Execute deploy
         const result = await spawnLog(
             registration.cmd ? registration.cmd : "serverless",
-            ["deploy", ...newArgs],
+            ["deploy", ...config, ...newArgs],
             {
                 cwd: gi.project.baseDir,
                 env: {
@@ -154,4 +169,18 @@ export function serverlessDeploy(registration: ServerlessDeployDetails): Execute
             ],
         };
     });
+}
+
+export async function findServerlessConfig(p: GitProject, registration: ServerlessDeployDetails): Promise<string> {
+    let configPath: string;
+    if (typeof registration.serverlessConfig === "string") {
+        configPath = registration.serverlessConfig;
+    } else if (typeof registration.serverlessConfig === "function") {
+        configPath = await registration.serverlessConfig(p);
+    }
+
+    if (typeof configPath !== "string") {
+        throw new Error(`Serverless Config Path must be a string!  Got ${typeof configPath}!`);
+    }
+    return configPath;
 }
