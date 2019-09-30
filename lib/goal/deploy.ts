@@ -137,12 +137,16 @@ export function serverlessDeploy(registration: ServerlessDeployDetails): Execute
         }
 
         const urls: GoalDetails["externalUrls"] = [];
-        const re = /Serverless Dashboard(.*)(https:\/\/[0-9A-Za-z.\/-]+)/;
-        const dashUrl = re.exec(pl.log)[2];
-        if (dashUrl) {
-            urls.push(
-                {label: "Dashboard", url: dashUrl},
-            );
+        try {
+            const re = /Serverless Dashboard(.*)(https:\/\/[0-9A-Za-z.\/-]+)/;
+            const dashUrl = re.exec(pl.log)[2];
+            if (dashUrl) {
+                urls.push(
+                    {label: "Dashboard", url: dashUrl},
+                );
+            }
+        } catch (e) {
+            logger.warn(`Couldn't parse Dashboard URL (Enterprise may not be in use)`);
         }
 
         // Run serverless smoke tests
