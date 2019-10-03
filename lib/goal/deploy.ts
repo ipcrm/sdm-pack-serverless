@@ -65,6 +65,13 @@ interface ServerlessDeployDetails {
      * Supply a fixed path or a function to locate where the Serverless config file is located.
      */
     serverlessConfig?: string | ServerlessConfigLocator;
+
+    /**
+     * Env Vars
+     *
+     * Extra environment variables to be supplied to the Serverless command executions.  Optional.
+     */
+    envVars?: Record<string, string>;
 }
 
 export class ServerlessDeploy extends FulfillableGoalWithRegistrations<ServerlessDeployDetails> {
@@ -125,6 +132,7 @@ export function serverlessDeploy(registration: ServerlessDeployDetails): Execute
                 cwd: gi.project.baseDir,
                 env: {
                     ...process.env,
+                    ...registration.envVars,
                     SERVERLESS_ACCESS_KEY: process.env.SERVERLESS_ACCESS_KEY || registration.accessKey,
                 },
                 log: pl,
@@ -167,6 +175,7 @@ export function serverlessDeploy(registration: ServerlessDeployDetails): Execute
                     cwd: gi.project.baseDir,
                     env: {
                         ...process.env,
+                        ...registration.envVars,
                         SERVERLESS_ACCESS_KEY: process.env.SERVERLESS_ACCESS_KEY || registration.accessKey,
                     },
                     log: pl,
