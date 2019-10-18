@@ -116,11 +116,11 @@ export class ServerlessDeploy extends FulfillableGoalWithRegistrations<Serverles
 export function serverlessDeploy(registration: ServerlessDeployDetails): ExecuteGoal {
     return doWithProject(async gi => {
         // Validate this SDM is supposed to handle this deployment
-        if (!gi.sdmGoal.fulfillment.name.includes(`${gi.configuration.name}-serverless-deploy`)) {
-            logger.debug(`Not running Serverless deploy for ${gi.sdmGoal.uniqueName}, it's fulfillment target is ${gi.sdmGoal.fulfillment.name}`);
+        if (!gi.goalEvent.fulfillment.name.includes(`${gi.configuration.name}-serverless-deploy`)) {
+            logger.debug(`Not running Serverless deploy for ${gi.goalEvent.uniqueName}, it's fulfillment target is ${gi.goalEvent.fulfillment.name}`);
             return {
                 code: 0,
-                state: gi.sdmGoal.state,
+                state: gi.goalEvent.state,
             };
         }
 
