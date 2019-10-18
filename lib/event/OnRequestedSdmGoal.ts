@@ -22,15 +22,15 @@ import {
     HandlerResult,
     logger,
     NoParameters,
-    OnEvent,
-    Success,
+    OnEvent, Parameters,
+    Success, Value,
 } from "@atomist/automation-client";
 import {
     addressChannelsFor,
     cancelableGoal,
     descriptionFromState, EventHandlerRegistration,
     executeGoal,
-    formatDate,
+    formatDate, Goal, GoalImplementation,
     GoalInvocation,
     GoalScheduler,
     isGoalCanceled,
@@ -48,17 +48,24 @@ import {isGoalRelevant} from "@atomist/sdm-core/lib/internal/delivery/goals/supp
 import {verifyGoal} from "@atomist/sdm-core/lib/internal/signing/goalSigning";
 import {formatDuration} from "@atomist/sdm-core/lib/util/misc/time";
 import { SdmGoalFulfillmentMethod } from "@atomist/sdm/lib/api/goal/SdmGoalMessage";
+import {serverlessDeploy, ServerlessDeploy} from "../goal/deploy";
 import {OnAnyRequestedSdmGoal} from "../typings/types";
 
+@Parameters()
+export class ServerlessDeployParms {
+    @Value("") // empty path returns the entire configuration
+    public configuration: SoftwareDeliveryMachineConfiguration;
+}
 /**
  * Handle a Serverless Deployment goal that is targeting this SDM for fulfillment
  */
-export const ServerlessFulfillGoalOnRequestedHandler: OnEvent<OnAnyRequestedSdmGoal.Subscription, OnAnyRequestedSdmGoal.Variables> = async (
+export const ServerlessFulfillGoalOnRequestedHandler: OnEvent<OnAnyRequestedSdmGoal.Subscription, ServerlessDeployParms> = async (
     event: EventFired<OnAnyRequestedSdmGoal.Subscription>,
     context: HandlerContext,
+    params: ServerlessDeployParms,
 ): Promise<HandlerResult> => {
     const sdmGoal = event.data.SdmGoal[0] as SdmGoalEvent;
-    const configuration = configurationValue<SoftwareDeliveryMachineConfiguration>();
+    const configuration = params.configuration;
 
     /**
      * Did this SDM schedule this goal?
@@ -107,6 +114,17 @@ export const ServerlessFulfillGoalOnRequestedHandler: OnEvent<OnAnyRequestedSdmG
     const preferences = configuration.sdm.preferenceStoreFactory(context);
 
     const implementation = configuration.implementationMapper.findImplementationBySdmGoal(sdmGoal);
+
+    // const implmentation: GoalImplementation = {
+    //     // @ipcrm/sdm-pack-serverless-serverless-deploy#atomist.config.ts:26
+    //     implementationName: sdmGoal.fulfillment.name,
+    //     goal: new ServerlessDeploy(),
+    //     goalExecutor: serverlessDeploy({}),
+    //     logInterpreter: {} ,
+    //     pushTest:,
+    //     projectListeners: {},
+    // };
+
     const { goal } = implementation;
 
     const progressLog = new WriteToAllProgressLog(
@@ -179,9 +197,10 @@ export const ServerlessFulfillGoalOnRequestedHandler: OnEvent<OnAnyRequestedSdmG
     }
 };
 
-export const ServerlessFulfillGoalOnRequested: EventHandlerRegistration<NoParameters> = {
+export const ServerlessFulfillGoalOnRequested: EventHandlerRegistration<OnAnyRequestedSdmGoal.Subscription, ServerlessDeployParms> = {
     name: "ServerlessFulfillGoalOnRequested",
     subscription: GraphQL.subscription({name: "OnAnyRequestedSdmGoal"}),
+    paramsMaker: ServerlessDeployParms,
     listener: ServerlessFulfillGoalOnRequestedHandler,
 };
 
