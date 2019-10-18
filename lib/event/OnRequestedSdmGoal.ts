@@ -50,7 +50,6 @@ import {isGoalRelevant} from "@atomist/sdm-core/lib/internal/delivery/goals/supp
 import {verifyGoal} from "@atomist/sdm-core/lib/internal/signing/goalSigning";
 import {formatDuration} from "@atomist/sdm-core/lib/util/misc/time";
 import { SdmGoalFulfillmentMethod } from "@atomist/sdm/lib/api/goal/SdmGoalMessage";
-import {serverlessDeploy, ServerlessDeploy} from "../goal/deploy";
 import {OnAnyRequestedSdmGoal} from "../typings/types";
 
 /**
@@ -83,7 +82,7 @@ export class ServerlessFulfillGoalOnRequested implements HandleEvent<OnAnyReques
         }
 
         // Determine if this fulfillment name matches our SDM instance and is a Serverless Deploy
-        if (!(sdmGoal.fulfillment.name.includes(`${this.configuration.name}-serverless-deploy`))) {
+        if (!(sdmGoal.fulfillment.name.includes(this.configuration.name) && sdmGoal.fulfillment.name.includes(`serverless-deploy`))) {
             logger.debug(`Serverless Deployment Handler: Goal ${sdmGoal.uniqueName} skipped because it is not a Serverless goal meant for this SDM`);
             return Success;
         }
@@ -117,7 +116,17 @@ export class ServerlessFulfillGoalOnRequested implements HandleEvent<OnAnyReques
         const addressChannels = addressChannelsFor(sdmGoal.push.repo, context);
         const preferences = this.configuration.sdm.preferenceStoreFactory(context);
 
-        const implementation = this.implementationMapper.findImplementationBySdmGoal(sdmGoal);
+        // Can we find an implementation for this goal?
+        const implementations = (this.implementationMapper as any).implementations as GoalImplementation[];
+        const matchedNames = implementations.filter(m => m.implementationName === sdmGoal.fulfillment.name);
+        if (matchedNames.length > 1) {
+            throw new Error(`Multiple implementations found for name '${sdmGoal.fulfillment.name}' on goal '${sdmGoal.uniqueName}'`);
+        }
+        if (matchedNames.length === 0) {
+            throw new Error(`No implementation found with name '${sdmGoal.fulfillment.name}': ` +
+                `Found ${implementations.map(impl => impl.implementationName)}`);
+        }
+        const implementation = matchedNames[0];
         const { goal } = implementation;
 
         const progressLog = new WriteToAllProgressLog(

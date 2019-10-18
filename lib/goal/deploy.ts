@@ -1,4 +1,4 @@
-import {GitProject, logger} from "@atomist/automation-client";
+import {Configuration, GitProject, logger} from "@atomist/automation-client";
 import {
     DefaultGoalNameGenerator,
     doWithProject,
@@ -7,7 +7,8 @@ import {
     FulfillableGoalWithRegistrations,
     getGoalDefinitionFrom,
     Goal, GoalDefinition, GoalDetails,
-    Implementation, IndependentOfEnvironment,
+    IndependentOfEnvironment,
+    SoftwareDeliveryMachineConfiguration,
     spawnLog,
     StringCapturingProgressLog,
     SuccessIsReturn0ErrorFinder,
@@ -74,10 +75,21 @@ interface ServerlessDeployDetails {
     envVars?: Record<string, string>;
 
     /**
-     * SDM Registration Name.  This is the name of the SDM that should actually run the deployment.  Optional.  If left blank the same
-     * SDM that schedules the goal will fulfill it.
+     * Using this option you can have a remote SDM execute the deployment action.  Typically this is used to traverse
+     * security zones or use unique credentials, etc.  The goal must be defined in both SDMs, however only one SDM should
+     * schedule the goals.
      */
-    registrationName?: string;
+    remoteExecution?: {
+        /**
+         * Name of the remote SDM to launc this goal
+         */
+        registrationName: string;
+
+        /**
+         * Stage for this deployment (just a friendly name)
+         */
+        stage: string;
+    };
 }
 
 export class ServerlessDeploy extends FulfillableGoalWithRegistrations<ServerlessDeployDetails> {
@@ -96,9 +108,7 @@ export class ServerlessDeploy extends FulfillableGoalWithRegistrations<Serverles
     ): this {
         const registrationName = `serverless-deploy`;
         this.addFulfillment({
-            name: registration.registrationName ?
-                `${registration.registrationName}-${registrationName}` :
-                `${this.sdm.configuration.name}-${registrationName}`,
+            name: determineRegistrationName(registration, this.sdm.configuration),
             goalExecutor: serverlessDeploy(registration),
             progressReporter: log => {
                 const re = /Serverless: (.*)/i;
@@ -116,7 +126,8 @@ export class ServerlessDeploy extends FulfillableGoalWithRegistrations<Serverles
 export function serverlessDeploy(registration: ServerlessDeployDetails): ExecuteGoal {
     return doWithProject(async gi => {
         // Validate this SDM is supposed to handle this deployment
-        if (!gi.goalEvent.fulfillment.name.includes(`${gi.configuration.name}-serverless-deploy`)) {
+        const myReg = determineThisRegistrationName(registration, gi.configuration);
+        if (!gi.goalEvent.fulfillment.name.includes(myReg)) {
             logger.debug(`Not running Serverless deploy for ${gi.goalEvent.uniqueName}, it's fulfillment target is ${gi.goalEvent.fulfillment.name}`);
             return {
                 code: 0,
@@ -227,4 +238,18 @@ export async function findServerlessConfig(p: GitProject, registration: Serverle
         throw new Error(`Serverless Config Path must be a string!  Got ${typeof configPath}!`);
     }
     return configPath;
+}
+
+function determineRegistrationName(registration: ServerlessDeployDetails, config: Configuration & SoftwareDeliveryMachineConfiguration): string {
+    const registrationName = `serverless-deploy`;
+    return registration.remoteExecution ?
+            `${registration.remoteExecution.registrationName}-${registration.remoteExecution.stage}-${registrationName}` :
+            `${config.name}-${registrationName}`;
+}
+
+function determineThisRegistrationName(registration: ServerlessDeployDetails, config: Configuration & SoftwareDeliveryMachineConfiguration): string {
+    const registrationName = `serverless-deploy`;
+    return registration.remoteExecution ?
+        `${config.name}-${registration.remoteExecution.stage}-${registrationName}` :
+        `${config.name}-${registrationName}`;
 }
