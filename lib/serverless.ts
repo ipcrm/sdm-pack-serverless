@@ -6,7 +6,10 @@ export const serverlessSupport = (): ExtensionPack => {
         ...metadata(),
         requiredConfigurationValues: [],
         configure: sdm => {
-            sdm.addEvent(ServerlessFulfillGoalOnRequested);
+            sdm.configuration.events = [
+                () => new ServerlessFulfillGoalOnRequested((sdm as any).goalFulfillmentMapper,
+                [...sdm.goalExecutionListeners]),
+            ];
             return sdm;
         },
     };

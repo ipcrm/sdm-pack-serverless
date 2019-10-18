@@ -25,12 +25,14 @@ import {
     OnEvent, Parameters,
     Success, Value,
 } from "@atomist/automation-client";
+import {EventHandler} from "@atomist/automation-client/lib/decorators";
+import {HandleEvent} from "@atomist/automation-client/lib/HandleEvent";
 import {
     addressChannelsFor,
     cancelableGoal,
     descriptionFromState, EventHandlerRegistration,
     executeGoal,
-    formatDate, Goal, GoalImplementation,
+    formatDate, Goal, GoalExecutionListener, GoalImplementation, GoalImplementationMapper,
     GoalInvocation,
     GoalScheduler,
     isGoalCanceled,
@@ -51,158 +53,143 @@ import { SdmGoalFulfillmentMethod } from "@atomist/sdm/lib/api/goal/SdmGoalMessa
 import {serverlessDeploy, ServerlessDeploy} from "../goal/deploy";
 import {OnAnyRequestedSdmGoal} from "../typings/types";
 
-@Parameters()
-export class ServerlessDeployParms {
-    @Value("") // empty path returns the entire configuration
-    public configuration: SoftwareDeliveryMachineConfiguration;
-}
 /**
  * Handle a Serverless Deployment goal that is targeting this SDM for fulfillment
  */
-export const ServerlessFulfillGoalOnRequestedHandler: OnEvent<OnAnyRequestedSdmGoal.Subscription, ServerlessDeployParms> = async (
-    event: EventFired<OnAnyRequestedSdmGoal.Subscription>,
-    context: HandlerContext,
-    params: ServerlessDeployParms,
-): Promise<HandlerResult> => {
-    const sdmGoal = event.data.SdmGoal[0] as SdmGoalEvent;
-    const configuration = params.configuration;
+@EventHandler("Fulfill a Serverless goal when it reaches 'requested' state and is from a remote SDM",
+    GraphQL.subscription("OnAnyRequestedSdmGoal"))
+export class ServerlessFulfillGoalOnRequested implements HandleEvent<OnAnyRequestedSdmGoal.Subscription> {
 
-    /**
-     * Did this SDM schedule this goal?
-     *
-     * If it did, this handler should exit and allow the default `FulfillGoalOnRequested` handler to process this goal.
-     * This handler is only used to process goals that were setup to fulfill on remote SDMs for Serverless Deployments
-     */
-    if (isGoalRelevant(sdmGoal)) {
-        logger.debug(`Serverless Deployment Handler: Goal ${sdmGoal.uniqueName} skipped because it will be processed by the default handler`);
-        return Success;
+    @Value("") // empty path returns the entire configuration
+    public configuration: SoftwareDeliveryMachineConfiguration;
+
+    constructor(private readonly implementationMapper: GoalImplementationMapper,
+                private readonly goalExecutionListeners: GoalExecutionListener[]) {
     }
 
-    // Determine if this fulfillment name matches our SDM instance and is a Serverless Deploy
-    if (!(sdmGoal.fulfillment.name.includes(`${configuration.name}-serverless-deploy`))) {
-        logger.debug(`Serverless Deployment Handler: Goal ${sdmGoal.uniqueName} skipped because it is not a Serverless goal meant for this SDM`);
-        return Success;
-    }
+    public async handle(event: EventFired<OnAnyRequestedSdmGoal.Subscription>,
+                        context: HandlerContext): Promise<HandlerResult> {
+        const sdmGoal = event.data.SdmGoal[0] as SdmGoalEvent;
 
-    // Handle Goal signing
-    await verifyGoal(sdmGoal, configuration.sdm.goalSigning, context);
-
-    if ((await cancelableGoal(sdmGoal, configuration)) && (await isGoalCanceled(sdmGoal, context))) {
-        logger.debug(`Goal ${sdmGoal.uniqueName} has been canceled. Not fulfilling`);
-        return Success;
-    }
-
-    if (sdmGoal.fulfillment.method === SdmGoalFulfillmentMethod.SideEffect) {
-        logger.debug("Not fulfilling side-effected goal '%s' with method '%s/%s'",
-            sdmGoal.uniqueName, sdmGoal.fulfillment.method, sdmGoal.fulfillment.name);
-        return Success;
-    } else if (sdmGoal.fulfillment.method === SdmGoalFulfillmentMethod.Other) {
-        // fail goal with neither Sdm nor SideEffect fulfillment
-        await updateGoal(
-            context,
-            sdmGoal,
-            {
-                state: SdmGoalState.failure,
-                description: `No fulfillment for ${sdmGoal.uniqueName}`,
-            });
-        return Success;
-    }
-
-    const id = configuration.sdm.repoRefResolver.repoRefFromSdmGoal(sdmGoal);
-    const credentials = await resolveCredentialsPromise(configuration.sdm.credentialsResolver.eventHandlerCredentials(context, id));
-    const addressChannels = addressChannelsFor(sdmGoal.push.repo, context);
-    const preferences = configuration.sdm.preferenceStoreFactory(context);
-
-    const implementation = configuration.implementationMapper.findImplementationBySdmGoal(sdmGoal);
-
-    // const implmentation: GoalImplementation = {
-    //     // @ipcrm/sdm-pack-serverless-serverless-deploy#atomist.config.ts:26
-    //     implementationName: sdmGoal.fulfillment.name,
-    //     goal: new ServerlessDeploy(),
-    //     goalExecutor: serverlessDeploy({}),
-    //     logInterpreter: {} ,
-    //     pushTest:,
-    //     projectListeners: {},
-    // };
-
-    const { goal } = implementation;
-
-    const progressLog = new WriteToAllProgressLog(
-        sdmGoal.name,
-        new LoggingProgressLog(sdmGoal.name, "debug"),
-        await configuration.sdm.logFactory(context, sdmGoal));
-
-    const goalInvocation: GoalInvocation = {
-        configuration,
-        sdmGoal,
-        goalEvent: sdmGoal,
-        goal,
-        progressLog,
-        context,
-        addressChannels,
-        preferences,
-        id,
-        credentials,
-    };
-
-    const goalScheduler = await findGoalScheduler(goalInvocation, configuration);
-    if (!!goalScheduler) {
-        const start = Date.now();
-        const result = await goalScheduler.schedule(goalInvocation);
-        if (!!result && result.code !== undefined && result.code !== 0) {
-            await updateGoal(context, sdmGoal, {
-                state: SdmGoalState.failure,
-                description: `Failed to schedule goal`,
-                url: progressLog.url,
-            });
-            await reportEndAndClose(result, start, progressLog);
-        } else {
-            await updateGoal(context, sdmGoal, {
-                state: !!result && !!result.state ? result.state : SdmGoalState.in_process,
-                phase: !!result && !!result.phase ? result.phase : "scheduled",
-                description: !!result && !!result.description ? result.description : descriptionFromState(goal, SdmGoalState.in_process),
-                url: progressLog.url,
-                externalUrls: !!result ? result.externalUrls : undefined,
-            });
+        /**
+         * Did this SDM schedule this goal?
+         *
+         * If it did, this handler should exit and allow the default `FulfillGoalOnRequested` handler to process this goal.
+         * This handler is only used to process goals that were setup to fulfill on remote SDMs for Serverless Deployments
+         */
+        if (isGoalRelevant(sdmGoal)) {
+            logger.debug(`Serverless Deployment Handler: Goal ${sdmGoal.uniqueName} skipped because it will be processed by the default handler`);
+            return Success;
         }
-        return {
-            ...result as any,
-            // successfully handled event even if goal failed
-            code: 0,
-        };
-    } else {
-        delete (sdmGoal as any).id;
 
-        await reportStart(sdmGoal, progressLog);
-        const start = Date.now();
+        // Determine if this fulfillment name matches our SDM instance and is a Serverless Deploy
+        if (!(sdmGoal.fulfillment.name.includes(`${this.configuration.name}-serverless-deploy`))) {
+            logger.debug(`Serverless Deployment Handler: Goal ${sdmGoal.uniqueName} skipped because it is not a Serverless goal meant for this SDM`);
+            return Success;
+        }
 
-        try {
-            const result = await executeGoal(
+        // Handle Goal signing
+        await verifyGoal(sdmGoal, this.configuration.sdm.goalSigning, context);
+
+        if ((await cancelableGoal(sdmGoal, this.configuration)) && (await isGoalCanceled(sdmGoal, context))) {
+            logger.debug(`Goal ${sdmGoal.uniqueName} has been canceled. Not fulfilling`);
+            return Success;
+        }
+
+        if (sdmGoal.fulfillment.method === SdmGoalFulfillmentMethod.SideEffect) {
+            logger.debug("Not fulfilling side-effected goal '%s' with method '%s/%s'",
+                sdmGoal.uniqueName, sdmGoal.fulfillment.method, sdmGoal.fulfillment.name);
+            return Success;
+        } else if (sdmGoal.fulfillment.method === SdmGoalFulfillmentMethod.Other) {
+            // fail goal with neither Sdm nor SideEffect fulfillment
+            await updateGoal(
+                context,
+                sdmGoal,
                 {
-                    projectLoader: configuration.sdm.projectLoader,
-                    goalExecutionListeners: configuration.goalExecutionListeners,
-                },
-                implementation,
-                goalInvocation);
-            await reportEndAndClose(result, start, progressLog);
+                    state: SdmGoalState.failure,
+                    description: `No fulfillment for ${sdmGoal.uniqueName}`,
+                });
+            return Success;
+        }
+
+        const id = this.configuration.sdm.repoRefResolver.repoRefFromSdmGoal(sdmGoal);
+        const credentials = await resolveCredentialsPromise(this.configuration.sdm.credentialsResolver.eventHandlerCredentials(context, id));
+        const addressChannels = addressChannelsFor(sdmGoal.push.repo, context);
+        const preferences = this.configuration.sdm.preferenceStoreFactory(context);
+
+        const implementation = this.implementationMapper.findImplementationBySdmGoal(sdmGoal);
+        const { goal } = implementation;
+
+        const progressLog = new WriteToAllProgressLog(
+            sdmGoal.name,
+            new LoggingProgressLog(sdmGoal.name, "debug"),
+            await this.configuration.sdm.logFactory(context, sdmGoal));
+
+        const goalInvocation: GoalInvocation = {
+            configuration: this.configuration,
+            sdmGoal,
+            goalEvent: sdmGoal,
+            goal,
+            progressLog,
+            context,
+            addressChannels,
+            preferences,
+            id,
+            credentials,
+        };
+
+        const goalScheduler = await findGoalScheduler(goalInvocation, this.configuration);
+        if (!!goalScheduler) {
+            const start = Date.now();
+            const result = await goalScheduler.schedule(goalInvocation);
+            if (!!result && result.code !== undefined && result.code !== 0) {
+                await updateGoal(context, sdmGoal, {
+                    state: SdmGoalState.failure,
+                    description: `Failed to schedule goal`,
+                    url: progressLog.url,
+                });
+                await reportEndAndClose(result, start, progressLog);
+            } else {
+                await updateGoal(context, sdmGoal, {
+                    state: !!result && !!result.state ? result.state : SdmGoalState.in_process,
+                    phase: !!result && !!result.phase ? result.phase : "scheduled",
+                    description: !!result && !!result.description ? result.description : descriptionFromState(goal, SdmGoalState.in_process),
+                    url: progressLog.url,
+                    externalUrls: !!result ? result.externalUrls : undefined,
+                });
+            }
             return {
-                ...result,
+                ...result as any,
                 // successfully handled event even if goal failed
                 code: 0,
             };
-        } catch (e) {
-            await reportEndAndClose(e, start, progressLog);
-            throw e;
+        } else {
+            delete (sdmGoal as any).id;
+
+            await reportStart(sdmGoal, progressLog);
+            const start = Date.now();
+
+            try {
+                const result = await executeGoal(
+                    {
+                        projectLoader: this.configuration.sdm.projectLoader,
+                        goalExecutionListeners: this.goalExecutionListeners,
+                    },
+                    implementation,
+                    goalInvocation);
+                await reportEndAndClose(result, start, progressLog);
+                return {
+                    ...result,
+                    // successfully handled event even if goal failed
+                    code: 0,
+                };
+            } catch (e) {
+                await reportEndAndClose(e, start, progressLog);
+                throw e;
+            }
         }
     }
-};
-
-export const ServerlessFulfillGoalOnRequested: EventHandlerRegistration<OnAnyRequestedSdmGoal.Subscription, ServerlessDeployParms> = {
-    name: "ServerlessFulfillGoalOnRequested",
-    subscription: GraphQL.subscription({name: "OnAnyRequestedSdmGoal"}),
-    paramsMaker: ServerlessDeployParms,
-    listener: ServerlessFulfillGoalOnRequestedHandler,
-};
+}
 
 async function findGoalScheduler(gi: GoalInvocation,
                                  configuration: SoftwareDeliveryMachineConfiguration): Promise<GoalScheduler | undefined> {

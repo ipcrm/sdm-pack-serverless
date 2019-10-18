@@ -26,7 +26,6 @@ export function machineMaker(config: SoftwareDeliveryMachineConfiguration): Soft
     const dev = new ServerlessDeploy()
         .with({
             deployArgs: { stage: "dev" },
-            registrationName: "@ipcrm/sdm-pack-serverless",
         });
 
     sdm.addExtensionPacks(
@@ -34,7 +33,7 @@ export function machineMaker(config: SoftwareDeliveryMachineConfiguration): Soft
     );
 
     sdm.withPushRules(
-        whenPushSatisfies(not(IsServerlessDeployable))
+        whenPushSatisfies(IsServerlessDeployable)
             .setGoals(dev),
     );
 
@@ -44,9 +43,8 @@ export function machineMaker(config: SoftwareDeliveryMachineConfiguration): Soft
 export const configuration: Configuration = {
     postProcessors: [
         configureSdm(machineMaker),
-        async c => {
-            c.name = "@ipcrm/sdm-pack-serverless-scheduler";
-            return c;
-        },
+            async c => {
+                return c;
+            },
     ],
 };

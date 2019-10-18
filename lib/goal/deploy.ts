@@ -94,8 +94,7 @@ export class ServerlessDeploy extends FulfillableGoalWithRegistrations<Serverles
     public with(
         registration: ServerlessDeployDetails,
     ): this {
-        const registrationName = DefaultGoalNameGenerator.generateName(`serverless-deploy`);
-        // tslint:disable-next-line:no-object-literal-type-assertion
+        const registrationName = `serverless-deploy`;
         this.addFulfillment({
             name: registration.registrationName ?
                 `${registration.registrationName}-${registrationName}` :
@@ -109,7 +108,7 @@ export class ServerlessDeploy extends FulfillableGoalWithRegistrations<Serverles
                 }
                 return {};
             },
-        } as Implementation);
+        });
         return this;
     }
 }
