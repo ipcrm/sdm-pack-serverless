@@ -1,0 +1,74 @@
+fragment PushFields on Push {
+    id
+    timestamp
+    branch
+    before {
+        url
+        sha
+        message
+        committer {
+            login
+            person {
+                ...PersonFields
+            }
+        }
+    }
+    after @required {
+        url
+        sha
+        message
+        author {
+            login
+            name
+            emails {
+                address
+            }
+            person {
+                ...PersonFields
+            }
+        }
+        committer {
+            login
+            name
+            emails {
+                address
+            }
+            person {
+                ...PersonFields
+            }
+        }
+        image {
+            image
+            imageName
+        }
+        images {
+            image
+            imageName
+        }
+        tags {
+            name
+            description
+            timestamp
+            release {
+                name
+                timestamp
+            }
+        }
+    }
+    repo {
+        ...CoreRepoFieldsAndChannels
+    }
+    commits {
+        url
+        sha
+        timestamp
+        message
+        author {
+            login
+            name
+            person {
+                ...PersonFields
+            }
+        }
+    }
+}

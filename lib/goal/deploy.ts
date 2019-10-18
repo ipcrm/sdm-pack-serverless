@@ -72,6 +72,12 @@ interface ServerlessDeployDetails {
      * Extra environment variables to be supplied to the Serverless command executions.  Optional.
      */
     envVars?: Record<string, string>;
+
+    /**
+     * SDM Registration Name.  This is the name of the SDM that should actually run the deployment.  Optional.  If left blank the same
+     * SDM that schedules the goal will fulfill it.
+     */
+    registrationName?: string;
 }
 
 export class ServerlessDeploy extends FulfillableGoalWithRegistrations<ServerlessDeployDetails> {
@@ -88,9 +94,12 @@ export class ServerlessDeploy extends FulfillableGoalWithRegistrations<Serverles
     public with(
         registration: ServerlessDeployDetails,
     ): this {
+        const registrationName = DefaultGoalNameGenerator.generateName(`serverless-deploy`);
         // tslint:disable-next-line:no-object-literal-type-assertion
         this.addFulfillment({
-            name: DefaultGoalNameGenerator.generateName("serverless-deploy"),
+            name: registration.registrationName ?
+                `${registration.registrationName}-${registrationName}` :
+                `${this.sdm.configuration.name}-${registrationName}`,
             goalExecutor: serverlessDeploy(registration),
             progressReporter: log => {
                 const re = /Serverless: (.*)/i;
@@ -107,6 +116,16 @@ export class ServerlessDeploy extends FulfillableGoalWithRegistrations<Serverles
 
 export function serverlessDeploy(registration: ServerlessDeployDetails): ExecuteGoal {
     return doWithProject(async gi => {
+        // Validate this SDM is supposed to handle this deployment
+        if (!gi.sdmGoal.fulfillment.name.includes(`${gi.configuration.name}-serverless-deploy`)) {
+            logger.debug(`Not running Serverless deploy for ${gi.sdmGoal.uniqueName}, it's fulfillment target is ${gi.sdmGoal.fulfillment.name}`);
+            return {
+                code: 0,
+                state: gi.sdmGoal.state,
+            };
+        }
+
+        // Start execution
         gi.progressLog.write(`Starting Serverless deploy`);
         const pl = new WriteToAllProgressLog("combinedLog", gi.progressLog, new StringCapturingProgressLog());
 

@@ -10,6 +10,7 @@ import {
     createSoftwareDeliveryMachine,
 } from "@atomist/sdm-core";
 import {ServerlessDeploy} from "../lib/goal/deploy";
+import {serverlessSupport} from "../lib/serverless";
 import {IsServerlessDeployable} from "../lib/support/pushTest";
 
 export function machineMaker(config: SoftwareDeliveryMachineConfiguration): SoftwareDeliveryMachine {
@@ -25,6 +26,10 @@ export function machineMaker(config: SoftwareDeliveryMachineConfiguration): Soft
         .with({
             deployArgs: { stage: "dev" },
         });
+
+    sdm.addExtensionPacks(
+        serverlessSupport(),
+    );
 
     sdm.withPushRules(
         whenPushSatisfies(IsServerlessDeployable)
